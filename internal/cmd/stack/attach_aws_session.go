@@ -97,6 +97,8 @@ func attachAwsSession(cliCtx *cli.Context) error {
 	awsCreds, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return errors.Wrap(err, "could not retrieve AWS credentials")
+	} else if err := fixExpiration(&awsCreds); err != nil {
+		fmt.Printf("Could not resolve credential expiration time: %v\n", err)
 	}
 
 	// Verify that the credentials haven't expired
@@ -274,4 +276,20 @@ func getAwsIdentityArn(ctx context.Context, cfg aws.Config) (string, error) {
 	}
 
 	return *output.Arn, nil
+}
+
+func fixExpiration(creds *aws.Credentials) error {
+	if creds.CanExpire {
+		return nil
+	}
+
+	if expirationTimestamp, ok := os.LookupEnv("AWS_CREDENTIAL_EXPIRATION"); !ok {
+		return nil
+	} else if expiration, err := time.Parse(time.RFC3339, expirationTimestamp); err != nil {
+		return err
+	} else {
+		creds.Expires = expiration
+		creds.CanExpire = true
+		return nil
+	}
 }
